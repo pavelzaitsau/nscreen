@@ -49,7 +49,7 @@ internal static class DiscoveryResponder
             // losing it must never take the screen stream down with it.
             if (!shutdown.IsCancellationRequested)
             {
-                Console.WriteLine($"Discovery unavailable ({ex.Message}). Clients must be given the address.");
+                Log.Line($"Discovery unavailable ({ex.Message}). Clients must be given the address.");
             }
         }
     }

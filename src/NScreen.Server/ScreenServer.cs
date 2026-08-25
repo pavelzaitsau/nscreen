@@ -29,6 +29,9 @@ internal static class ScreenServer
             shutdown.Cancel();
         };
 
+        // The second way in: --headless leaves no console for a Ctrl+C to arrive through.
+        using var stopSignal = StopSignal.Start(shutdown);
+
         using var duplicator = new DesktopDuplicator();
 
         using var listener = new TcpListener(IPAddress.Any, port);
@@ -41,9 +44,10 @@ internal static class ScreenServer
 
         DiscoveryResponder.Start(port, shutdown.Token);
 
-        Console.WriteLine($"nscreen-server  {Geometry(duplicator)}  port {port}" +
-                          $"  {(compress ? "brotli" : "raw")}");
-        Console.WriteLine("Run nscreen-client with no arguments on the other machine. (Ctrl+C to stop)");
+        Log.Line($"nscreen-server  {Geometry(duplicator)}  port {port}  {(compress ? "brotli" : "raw")}");
+        Log.Line(Log.IsFile
+            ? "Run nscreen-client with no arguments on the other machine. (nscreen-server --stop to stop)"
+            : "Run nscreen-client with no arguments on the other machine. (Ctrl+C to stop)");
 
         while (!shutdown.IsCancellationRequested)
         {
@@ -54,7 +58,7 @@ internal static class ScreenServer
             }
 
             var peer = client.Client.RemoteEndPoint?.ToString() ?? "?";
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] client connected: {peer}");
+            Log.Event($"client connected: {peer}");
             try
             {
                 Serve(duplicator, client, compress, shutdown.Token);
@@ -64,8 +68,12 @@ internal static class ScreenServer
                 // Client went away mid-frame. Nothing to do but wait for the next one.
             }
 
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] client disconnected: {peer}");
+            Log.Event($"client disconnected: {peer}");
         }
+
+        // Worth a line even interactively, but the reason it is here is the log file: without it
+        // nothing in there separates a server that stopped cleanly from one that was killed.
+        Log.Event("stopped");
     }
 
     /// <summary>
@@ -106,7 +114,7 @@ internal static class ScreenServer
         {
             // Every monitor is gone. Closing without a hello beats promising a size that does not
             // exist: the client retries, and gets a picture the moment a monitor carries one again.
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] no display attached, nothing to serve");
+            Log.Event("no display attached, nothing to serve");
             return;
         }
 
@@ -149,7 +157,7 @@ internal static class ScreenServer
                 // and let it reconnect against the new geometry.
                 if (duplicator.Width != width || duplicator.Height != height)
                 {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] screen changed to {Geometry(duplicator)}");
+                    Log.Event($"screen changed to {Geometry(duplicator)}");
                     return;
                 }
 
@@ -169,7 +177,7 @@ internal static class ScreenServer
             if (clock.ElapsedTicks >= statsAt)
             {
                 var seconds = statsAt / (double)Stopwatch.Frequency;
-                Console.Write($"\r  {frames / seconds,5:0.0} fps   {bytesOut * 8 / seconds / 1e6,7:0.00} Mbit/s   ");
+                Log.Status($"{frames / seconds,5:0.0} fps   {bytesOut * 8 / seconds / 1e6,7:0.00} Mbit/s");
                 frames = 0;
                 bytesOut = 0;
                 statsAt = clock.ElapsedTicks + Stopwatch.Frequency;
