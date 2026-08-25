@@ -28,9 +28,14 @@ Sent once by the server immediately after accept, before any frame. 12 bytes.
 
 A client that does not see `"NSC1"` must close the connection.
 
-Geometry is fixed for the lifetime of the connection. If the server's resolution changes it drops
-the connection rather than renegotiating, because the client's bitmap is allocated from these
-dimensions.
+Geometry is fixed for the lifetime of the connection. The server drops the connection rather than
+renegotiating, because the client's bitmap is allocated from these dimensions. A resolution change
+does that, and so does a different monitor taking over. The client reconnects and sizes a new bitmap
+from the next hello, so a monitor switch shows as a held picture rather than a closed window.
+
+A server whose monitors carry no desktop closes the connection before the hello. A client MUST retry
+rather than fail: there is nothing to show, and an invented size would put a black screen on the
+wire.
 
 There is no capability or feature field. Compression is decided per frame and advertised in the
 frame itself, so there is nothing to negotiate here.
