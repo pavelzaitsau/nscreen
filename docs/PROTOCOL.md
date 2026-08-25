@@ -4,7 +4,8 @@ One TCP connection, one direction: the server talks, the client listens. There i
 channel, no acknowledgement and no heartbeat — the connection itself is the session, and closing it
 ends the session. All integers are **little-endian**.
 
-Defined by [`Protocol.cs`](../src/NScreen.Core/Protocol.cs).
+Defined by [`Protocol.cs`](../src/NScreen.Core/Protocol.cs), written by
+[`ScreenServer.cs`](../src/NScreen.Server/ScreenServer.cs).
 
 ## Socket options
 
@@ -106,7 +107,8 @@ to do that backpressure does not already do better.
 ## Discovery
 
 A separate, tiny UDP exchange on port **7001** whose only job is to save the user from typing an IP
-address. Defined by [`Discovery.cs`](../src/NScreen.Core/Discovery.cs).
+address. Defined by [`Discovery.cs`](../src/NScreen.Core/Discovery.cs) and answered by
+[`DiscoveryResponder.cs`](../src/NScreen.Server/DiscoveryResponder.cs).
 
 **Probe** — client to broadcast, 4 bytes:
 
