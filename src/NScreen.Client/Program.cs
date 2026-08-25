@@ -12,6 +12,7 @@ internal static class Program
 
           nscreen-client                  find a server on the LAN and connect to it
           nscreen-client <host>[:port]    connect directly, skipping discovery
+          nscreen-client [fe80::1]:7000   an IPv6 literal only carries a port in brackets
 
             --port N   TCP port (default 7000)
 
@@ -47,18 +48,14 @@ internal static class Program
                         return Fail($"Unknown option '{token}'.");
                     }
 
-                    // A bare token is the target. "host:port" is the form that gets pasted around,
-                    // so accept it as well as --port.
-                    host = token;
-                    var colon = host.LastIndexOf(':');
-                    if (colon > 0 && int.TryParse(host.AsSpan(colon + 1), out var inlinePort))
-                    {
-                        port = inlinePort;
-                        host = host[..colon];
-                    }
-
+                    (host, port) = Target.Split(token, port);
                     break;
             }
+        }
+
+        if (port is < 1 or > 65535)
+        {
+            return Fail($"Port {port} is outside 1-65535.");
         }
 
         try
@@ -109,7 +106,8 @@ internal static class Program
     private static void Watch(string host, int port)
     {
         using var client = new TcpClient();
-        Console.WriteLine($"Connecting to {host}:{port} ...");
+        var address = Target.Describe(host, port);
+        Console.WriteLine($"Connecting to {address} ...");
         client.Connect(host, port);
         client.NoDelay = true;
         client.ReceiveBufferSize = 1 << 20;
@@ -121,7 +119,7 @@ internal static class Program
         var (width, height) = Protocol.ReadHello(hello);
         Console.WriteLine($"Connected: {width}x{height}. Esc closes, F11 toggles fullscreen.");
 
-        var title = $"nscreen - {host} - {width}x{height}";
+        var title = $"nscreen - {address} - {width}x{height}";
 
         AppBuilder.Configure<Application>()
             .UsePlatformDetect()
