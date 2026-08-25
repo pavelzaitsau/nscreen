@@ -1,0 +1,67 @@
+<Project>
+
+  <!--
+    Settings shared by every project. Anything the SDK already defaults to is deliberately absent,
+    as is the target framework and platform: the server is Windows-x64 by nature (DXGI, 64-bit COM
+    vtables), the client and the shared protocol code are plain net10.0 and run on macOS too.
+  -->
+  <PropertyGroup Condition=" '$(MSBuildProjectExtension)'=='.csproj' ">
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Interop and pixel copying: unsafe is the point here, not an escape hatch. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Symbols inside the assembly, so a publish output is the binary and nothing else. -->
+    <DebugType>embedded</DebugType>
+
+    <!-- Smaller and faster to start, and nothing here formats culture-sensitively. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <AnalysisLevel>latest</AnalysisLevel>
+
+    <!-- Surface the IDExxxx code-style analyzers at build time, not only in the IDE. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!--
+      CA1416 (platform compatibility) is deliberately NOT suppressed. The server declares
+      net10.0-windows so it never trips it, and in the net10.0 client and Core it is exactly the
+      guardrail that catches a Windows-only API sneaking into code that has to run on macOS.
+
+      AD0001 - IDisposableAnalyzers.SuppressFinalizeAnalyzer crashes on C# function pointers
+               (InvalidCastException on FunctionPointerTypeSymbol), which the server's interop
+               layer is full of. Analyzer bug, not a finding; drop this when it is fixed.
+    -->
+    <NoWarn>$(NoWarn);AD0001</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Analyzer set carried over from the Netrix house configuration (Work/wp/src).
+    Debug-only and PrivateAssets="all": build-time only, never a runtime or transitive dependency,
+    so Release builds stay fast and nothing extra ships.
+
+    Deliberately not carried over: Moq.Analyzers and SerilogAnalyzer - this project has neither
+    Moq nor Serilog. Re-add them here if that ever changes.
+  -->
+  <ItemGroup Condition=" '$(Configuration)' == 'Debug' AND '$(MSBuildProjectExtension)'=='.csproj' ">
+    <!-- Official Roslyn analyzers -->
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.301" PrivateAssets="all" />
+
+    <!-- Sonar analyzers -->
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.27.0.140913" PrivateAssets="all" />
+
+    <!-- Roslynator analyzers -->
+    <PackageReference Include="Roslynator.Analyzers" Version="4.15.0" PrivateAssets="all" />
+    <PackageReference Include="Roslynator.Formatting.Analyzers" Version="4.15.0" PrivateAssets="all" />
+
+    <!-- Multithreading analyzers -->
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" PrivateAssets="all" />
+
+    <!-- Miscellaneous analyzers -->
+    <PackageReference Include="IDisposableAnalyzers" Version="4.0.8" PrivateAssets="all" />
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.109" PrivateAssets="all" />
+    <PackageReference Include="SharpSource" Version="1.33.1" PrivateAssets="all" />
+    <PackageReference Include="NewStyleCop.Analyzers" Version="1.2.1" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
