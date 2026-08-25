@@ -9,7 +9,7 @@ This is not a remote desktop. There is no mouse or keyboard control, no audio an
 - **The server** runs on Windows x64, and cannot run anywhere else: DXGI Desktop Duplication has no macOS equivalent. It has no runtime dependencies - every OS call is hand-written P/Invoke, and COM goes through the vtable directly.
 - **The client** runs on Windows x64 and on **macOS with Apple Silicon**, from one codebase, on Avalonia.
 
-The server takes two flags and the client takes one. Everything else decides itself.
+The server takes four flags and the client takes one. Everything else decides itself.
 
 ## Quick start
 
@@ -74,16 +74,50 @@ On macOS, build the client project only. The server does not start there.
 
 ### nscreen-server, the screen source, Windows
 
-It shares the primary display and takes two flags:
+It shares the primary display and takes four flags:
 
 | Option | Effect |
 | --- | --- |
 | `--port N` | TCP port, default 7000 |
 | `--compress` | Brotli over the payload |
+| `--headless` | Serve in the background: no console, no window, a log file instead |
+| `--system` | High priority, with administrator rights |
 
 `--compress` earns its cost on Wi-Fi, which means almost always where the client is a laptop, and is unnecessary on wired gigabit. On a desktop it gives **20-40x** for the price of one Brotli pass per frame. Compression is decided per frame: where Brotli does not win, the frame goes out raw.
 
 There is no frame-rate option, and nothing to set one with. DXGI delivers a frame only when the screen changed, and TCP backpressure sets the rest.
+
+#### Serving in the background
+
+`--headless` starts the server as a background process and hands the prompt straight back:
+
+```bash
+nscreen-server --headless
+```
+
+Windows fixes both the console and the access token when a process starts, so a running process can shed neither. The first process starts the real server, prints where it went, and exits. Task Manager lists the server under **Background processes**, because it owns no window.
+
+A background server has no console to print to. It writes events to `nscreen-server.log` beside the executable: the startup line, every client arriving and leaving, a screen change, and the stop. The per-second `fps` line is dropped, because each one overwrites the last and a file keeps every one of them. The log restarts once it passes 1 MB. A folder the server cannot write to costs the log, never the stream.
+
+Stop it the way `Ctrl+C` would:
+
+```bash
+nscreen-server --stop
+```
+
+`--stop` sets a named event, and the server tears down the socket and the duplication object on it. The name is scoped to one Windows session, which is the session the server shares. Every server in that session waits on the same event, so one `--stop` stops all of them. Where no server answers, `--stop` prints one line and exits with 1.
+
+#### Priority and rights
+
+`--system` raises the process to the High priority class, and asks UAC for administrator rights where it has none:
+
+```bash
+nscreen-server --headless --system
+```
+
+The two flags belong together: UAC prompts once, and nothing appears on the screen after that. Realtime priority is deliberately absent. The capture loop would outrank the compositor and the input stack of the machine whose screen it shares.
+
+Administrator rights do not buy two things worth knowing about. The UAC prompt and the lock screen live on a separate desktop, which DXGI never hands over. The picture stops until that desktop goes away. And an ordinary prompt cannot signal a server that came up elevated on its own, because Windows integrity levels block it whatever the ACL says. Stop that one from an elevated prompt, or with `taskkill /IM nscreen-server.exe`.
 
 ### nscreen-client, the viewer, Windows and macOS
 
@@ -192,9 +226,12 @@ src/
     ServerInfo.cs            what the client found on the network
     Rect.cs                  RECT, which also describes a rectangle on the wire
   NScreen.Server/            net10.0-windows, x64. Links neither user32 nor gdi32
-    Program.cs               two flags
+    Program.cs               four flags, and what each one decides before the server starts
     ScreenServer.cs          listener + send loop
     DiscoveryResponder.cs    one UDP socket, one sleeping thread
+    Launcher.cs              the relaunch --headless and --system need, and the priority
+    StopSignal.cs            the named event behind --stop
+    Log.cs                   console, or the log file --headless writes instead
     Native/                  AGENTS.md - the vtable rules live here
       Com.cs                 QueryInterface/Release through the vtable, no CLR COM interop
       Dxgi.cs                structs, IIDs, vtable slot numbers

@@ -85,7 +85,7 @@ dotnet run --project src/NScreen.Client -c Release
 
 Note the two output paths differ — `net10.0-windows` for the server, `net10.0` for the client.
 
-**There is no headless benchmark and no build script.** Both existed and were deleted: the server
+**There is no benchmark mode and no build script.** Both existed and were deleted: the server
 already prints its resolution at startup (which proves duplication came up) and `fps` / `Mbit/s`
 every second while serving, so a separate bench mode was duplicating the diagnostic it was meant to
 provide. Do not reintroduce either without a reason the live output does not already cover.
@@ -239,14 +239,25 @@ Break these and things fail in ways that are hard to see:
 10. **`Protocol` and `Discovery` are the only places a wire layout is written down.** Both sides ship
     in the same repo, so there is no compatibility window to preserve — but any framing change must
     bump the `"NSC1"` magic so a stale build cannot talk to a new one silently.
+11. **`--headless` and `--system` are decided before the server exists.** Windows fixes a process's
+    console and access token when it starts, so `Launcher` starts the exe again and appends
+    `--relaunched`. That marker is the only thing stopping the child from reading the same flags,
+    reaching the same conclusion and starting a third process. A new flag that changes what the
+    *process* is belongs on that path, not in `ScreenServer`.
+12. **Diagnostics go through `Log`, never `Console`.** Under `--headless` the console is not there
+    to write to, and a direct `Console.WriteLine` in the serve path is a line that silently goes
+    nowhere. `Log.Status` is the exception by design: the fps line replaces itself, so it is console
+    only and headless drops it.
 
 ## Scope
 
 The user asked for a deliberately narrow, resource-frugal tool: primary display only, one client, no
 input forwarding, no audio, no authentication, trusted home LAN. Lightness is a stated requirement,
 **especially on the server** — the standing instruction is to prefer deleting code to adding options.
-The server is down to two flags and the client to one; treat that as the target, not a starting
-point. The client carries Avalonia because cross-platform was also a stated requirement; that buys
-it a UI toolkit, not licence to grow features.
+The server takes four flags and the client one. `--headless` and `--system` were added on request
+for unattended use, and the standing instruction did not change with them: prefer deleting code to
+adding options, and treat the current count as the ceiling rather than a starting point. The client
+carries Avalonia because cross-platform was also a stated requirement; that buys it a UI toolkit,
+not licence to grow features.
 
 [docs/ROADMAP.md](docs/ROADMAP.md) records what was left out and why.

@@ -96,6 +96,24 @@ Not a code problem first. The options, roughly in order of effort:
 - **STUN / UDP hole punching.** Real P2P, but ~20-30% of NAT pairs still fall back to a relay, so it
   is strictly _additional_ work on top of having a relay, never instead of it.
 
+## 7. Capturing across UAC, the lock screen and a logoff
+
+**Why it comes up.** `--headless --system` covers unattended use until the desktop switches. A UAC
+prompt and the lock screen are separate desktops, where duplication returns `ACCESS_LOST`. The
+client holds the last frame until the user's own desktop comes back. Administrator rights change
+none of that; the desktop, not the token, is what withholds the pixels.
+
+**What it takes.** A process that follows the input desktop, which means `SetThreadDesktop` against
+the current one, which means the SYSTEM account rather than an elevated user. Desktop Duplication
+cannot run in session 0, so SYSTEM alone is not enough either: it takes a service that stays in
+session 0 and a worker it launches into the interactive session through `WTSQueryUserToken` and
+`CreateProcessAsUser`. The service also owns installation, session-change notifications and
+restarting a worker that died with its session.
+
+**Cost.** Days rather than hours, and it turns one executable into a service plus a worker. It sits
+last here for that reason, not because the gap does not matter. Weigh it against the frugal server
+this is meant to be.
+
 ## Explicitly not planned
 
 - **Input forwarding** (mouse/keyboard control). That turns a screen-sharing tool into remote
