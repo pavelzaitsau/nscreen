@@ -4,31 +4,25 @@ using System.Net.Sockets;
 
 namespace NScreen.Client;
 
-/// <summary>The socket read loop. Runs on its own thread, straight into the window's bitmap.</summary>
+/// <summary>
+/// The socket read loop, straight into the window's bitmap. Blocks the calling thread until the
+/// stream ends, which is how the caller learns to reconnect.
+/// </summary>
 /// <param name="stream">Connected frame stream, already past the hello.</param>
 /// <param name="window">Where decoded pixels go.</param>
 /// <param name="width">Server screen width, from the hello.</param>
 /// <param name="height">Server screen height, from the hello.</param>
-/// <param name="onStats">Fires on the receive thread, once a second.</param>
-/// <param name="onEnded">Fires on the receive thread when the stream ends, for any reason.</param>
+/// <param name="onStats">Fires on the calling thread, once a second.</param>
 internal sealed class FrameReceiver(
     NetworkStream stream,
     ViewerWindow window,
     int width,
     int height,
-    Action<string> onStats,
-    Action onEnded)
+    Action<string> onStats)
 {
     private readonly int _frameBytes = width * height * 4;
 
-    public void Start()
-        => new Thread(Run)
-        {
-            IsBackground = true,
-            Name = "nscreen-receive",
-        }.Start();
-
-    private void Run()
+    public void Receive()
     {
         var rects = new RECT[Protocol.MaxRects];
         var rectBytes = new byte[Protocol.MaxRects * Protocol.RectBytes];
@@ -123,7 +117,5 @@ internal sealed class FrameReceiver(
         {
             Console.WriteLine($"Stream ended: {ex.Message}");
         }
-
-        onEnded();
     }
 }
