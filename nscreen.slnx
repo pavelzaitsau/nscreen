@@ -2,4 +2,5 @@
   <Project Path="src/NScreen.Core/NScreen.Core.csproj" />
   <Project Path="src/NScreen.Server/NScreen.Server.csproj" />
   <Project Path="src/NScreen.Client/NScreen.Client.csproj" />
+  <Project Path="tests/NScreen.Tests/NScreen.Tests.csproj" />
 </Solution>

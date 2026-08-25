@@ -1,0 +1,34 @@
+# Analyzer tuning for the test project. src/.editorconfig owns these decisions for the source tree
+# and does not reach a sibling folder, so the entries tests need are repeated here.
+
+[*.{cs}]
+csharp_using_directive_placement = outside_namespace:silent
+
+dotnet_diagnostic.MA0002.severity = none # IEqualityComparer<string> or IComparer<string> is missing
+dotnet_diagnostic.SA0001.severity = none # XML comment analysis is disabled
+dotnet_diagnostic.SA1101.severity = none # Prefix local calls with this
+dotnet_diagnostic.SA1309.severity = none # Field names should not begin with an underscore
+dotnet_diagnostic.SA1600.severity = none # Elements should be documented
+dotnet_diagnostic.SA1633.severity = none # File must have header
+
+# Test-only. A test name reads as Member_condition_result, and the byte arrays in it are the
+# expected contents of a wire format rather than an allocation in a hot path.
+dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores
+dotnet_diagnostic.CA1861.severity = none # Avoid constant arrays as arguments
+
+# Several tests assert the same thing about different inputs. The method name is what tells them
+# apart, and merging them would bury the case each one covers.
+dotnet_diagnostic.S4144.severity = none # Methods should not have identical implementations
+
+# A test that pins a documented constant - the port, the magic, a byte offset - reads as always
+# true to the analyzer, because both sides are consts that fold to the same literal. Holding the
+# number to docs/PROTOCOL.md is what the test is for.
+dotnet_diagnostic.MSTEST0032.severity = none # Assertion condition is known to be always true
+
+# Integer division is the intent: a byte index divided by the pixel size and then by the row width.
+# src/.editorconfig makes the same call for the same reason.
+dotnet_diagnostic.SS003.severity = none # Implicit rounding in a divisive expression
+
+# The expected bytes of a wire format are copied from docs/PROTOCOL.md by hand, and a hex array is
+# what keeps them comparable with it. A UTF-8 literal would hide them.
+dotnet_diagnostic.IDE0230.severity = none # Use UTF-8 string literal

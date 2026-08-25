@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Wire-format and discovery tests, MSTest so they run in the Visual Studio Test Explorer as well
+    as from `dotnet test`. Plain net10.0, like the code under test: everything here has to run on
+    macOS as well as Windows, and nothing in it touches DXGI.
+
+    The server is not referenced. It is net10.0-windows, its risk lives in vtable slot numbers and
+    struct layouts, and only running it on Windows checks those - see README, "Deliberately absent".
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>NScreen.Tests</RootNamespace>
+    <IsPublishable>false</IsPublishable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="MSTest" Version="3.11.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NScreen.Core\NScreen.Core.csproj" />
+    <ProjectReference Include="..\..\src\NScreen.Client\NScreen.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <Using Include="NScreen" />
+  </ItemGroup>
+
+</Project>

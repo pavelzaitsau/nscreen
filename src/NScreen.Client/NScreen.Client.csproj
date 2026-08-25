@@ -34,6 +34,11 @@
     <ProjectReference Include="..\NScreen.Core\NScreen.Core.csproj" />
   </ItemGroup>
 
+  <!-- DiscoveryProbe is internal, and the test that exercises it against a real socket needs it. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="NScreen.Tests" />
+  </ItemGroup>
+
   <!--
     Skia and HarfBuzz ship 100 MB of native .pdb alongside their .dll, as native runtime assets -
     so AllowedReferenceRelatedFileExtensions does not reach them and they end up dwarfing everything
