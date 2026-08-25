@@ -7,6 +7,9 @@ namespace NScreen.Client;
 
 internal static class Program
 {
+    /// <summary>How long the handshake may take before the peer is declared not to be a server.</summary>
+    private const int HelloTimeoutMs = 5000;
+
     private const string Usage = """
         nscreen-client - watch a screen shared by nscreen-server
 
@@ -114,8 +117,27 @@ internal static class Program
 
         using var stream = client.GetStream();
 
+        // An nscreen server sends the hello the moment it accepts. Anything else listening on the
+        // port - macOS gives 7000 to the AirPlay receiver, for one - accepts and then says nothing,
+        // so this one read is bounded. The frame loop that follows is not: an idle screen produces
+        // no traffic at all, and a timeout there would kill a healthy connection.
+        client.ReceiveTimeout = HelloTimeoutMs;
         var hello = new byte[Protocol.HelloBytes];
-        stream.ReadExactly(hello);
+        try
+        {
+            stream.ReadExactly(hello);
+        }
+        catch (IOException ex) when (ex.InnerException is SocketException
+        {
+            SocketErrorCode: SocketError.TimedOut,
+        })
+        {
+            throw new InvalidDataException(
+                $"{address} accepted the connection and then sent nothing for " +
+                $"{HelloTimeoutMs / 1000} s. Check that nscreen-server is what listens there.");
+        }
+
+        client.ReceiveTimeout = 0;
         var (width, height) = Protocol.ReadHello(hello);
         Console.WriteLine($"Connected: {width}x{height}. Esc closes, F11 toggles fullscreen.");
 
