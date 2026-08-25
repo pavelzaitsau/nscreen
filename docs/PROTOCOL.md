@@ -4,8 +4,9 @@ One TCP connection, one direction: the server talks, the client listens. There i
 channel, no acknowledgement and no heartbeat — the connection itself is the session, and closing it
 ends the session. All integers are **little-endian**.
 
-Defined by [`Protocol.cs`](../src/NScreen.Core/Protocol.cs), written by
-[`ScreenServer.cs`](../src/NScreen.Server/ScreenServer.cs).
+Implemented by [`Protocol.cs`](../src/NScreen.Core/Protocol.cs) (the layout, shared),
+[`ScreenServer.cs`](../src/NScreen.Server/ScreenServer.cs) (writer) and
+[`FrameReceiver.cs`](../src/NScreen.Client/FrameReceiver.cs) (reader).
 
 ## Socket options
 
@@ -61,8 +62,13 @@ back: `(right - left) * 4` bytes per row, `bottom - top` rows.
 
 Rectangles may overlap; the client applies them in order, so later rectangles win.
 
-The client sizes its decompression buffer from `rawBytes` and must reject anything larger than one
-whole-screen frame.
+Every rectangle lies inside the screen the hello announced, and `right`/`bottom` are never smaller
+than `left`/`top`. Neither `wireBytes` nor `rawBytes` exceeds one whole-screen frame: the rectangles
+cover at most that, and a compressed payload is kept only when it came out smaller than the raw one.
+
+A reader MUST check all four of those before it indexes anything, and MUST close the connection when
+one fails. A rectangle reaching outside the bitmap walks off the buffer, and a length taken on trust
+sizes an allocation from bytes that arrived over the network.
 
 BGRA32 is not an arbitrary choice: it is exactly `PixelFormat.Bgra8888`, so frames reach the screen
 with a row `memcpy` and no pixel conversion on either platform.
@@ -107,8 +113,9 @@ to do that backpressure does not already do better.
 ## Discovery
 
 A separate, tiny UDP exchange on port **7001** whose only job is to save the user from typing an IP
-address. Defined by [`Discovery.cs`](../src/NScreen.Core/Discovery.cs) and answered by
-[`DiscoveryResponder.cs`](../src/NScreen.Server/DiscoveryResponder.cs).
+address. Implemented by [`Discovery.cs`](../src/NScreen.Core/Discovery.cs) (framing),
+[`DiscoveryResponder.cs`](../src/NScreen.Server/DiscoveryResponder.cs) (server) and
+[`DiscoveryProbe.cs`](../src/NScreen.Client/DiscoveryProbe.cs) (client).
 
 **Probe** — client to broadcast, 4 bytes:
 
@@ -148,4 +155,4 @@ and keeps serving frames, and the client still works when given an address direc
 
 No authentication, no encryption, no integrity check. Anyone who can reach `IP:port` sees the
 screen, and any machine on the network can discover that a server exists. This is a trusted-LAN
-tool by explicit design.
+tool by explicit design — see [ROADMAP.md](ROADMAP.md) for what adding security would involve.

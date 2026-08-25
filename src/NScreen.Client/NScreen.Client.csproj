@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The viewer: finds a server, receives frames, blits them into an Avalonia window.
+    Runs on Windows and on Apple Silicon macOS, so it stays on plain net10.0 with no Windows-only
+    API anywhere - CA1416 is left enabled (see Directory.Build.props) to enforce exactly that.
+  -->
+  <PropertyGroup>
+    <!--
+      Exe, not WinExe: the client prints what it is doing (discovery, connection, stream errors)
+      and losing that output when launched from a terminal would be worse than the extra console.
+    -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>nscreen-client</AssemblyName>
+    <RootNamespace>NScreen.Client</RootNamespace>
+
+    <!--
+      No app.manifest here on purpose: Avalonia sets per-monitor DPI awareness itself on Windows,
+      and a manifest is meaningless on macOS.
+      No XAML and no theme package either - a plain Control draws the frame by overriding
+      Visual.Render, so the Avalonia XAML compiler and its runtime reflection never enter the
+      picture, which is what keeps trimming honest.
+    -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NScreen.Core\NScreen.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Skia and HarfBuzz ship 100 MB of native .pdb alongside their .dll, as native runtime assets -
+    so AllowedReferenceRelatedFileExtensions does not reach them and they end up dwarfing everything
+    else in the publish folder. Our own symbols are embedded (DebugType=embedded), so there is no
+    managed .pdb to protect: dropping every .pdb from the publish list is exactly right.
+  -->
+  <Target Name="DropNativeSymbolsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
+</Project>
