@@ -111,8 +111,26 @@ session 0 and a worker it launches into the interactive session through `WTSQuer
 restarting a worker that died with its session.
 
 **Cost.** Days rather than hours, and it turns one executable into a service plus a worker. It sits
-last here for that reason, not because the gap does not matter. Weigh it against the frugal server
+this far down for that reason, not because the gap does not matter. Weigh it against the frugal server
 this is meant to be.
+
+## 8. Text recognition on Windows
+
+**Where it stands.** Dragging a region and copying it works on both platforms. Reading the text in
+that region works on macOS only, through Vision — see
+[`MacTextRecognizer.cs`](../src/NScreen.Client/Native/MacTextRecognizer.cs). On Windows the client
+copies nothing in text mode and says why.
+
+**What it takes.** `Windows.Media.Ocr` is the engine, and it is WinRT rather than flat exports or
+COM the way `Native/` uses them. Reaching it means either `CsWinRT` projections, which is a package
+and a trimming problem in a client that carries neither, or hand-written `IActivationFactory`
+activation through `RoGetActivationFactory`. The second one fits the codebase and is perhaps 200
+lines: activate `OcrEngine`, call `TryCreateFromUserProfileLanguages`, wrap the pixels in a
+`SoftwareBitmap`, then walk `OcrResult.Lines`.
+
+**Worth knowing first.** The engine needs the language pack for what it reads, English is present on
+most installs, and the result is per-line text with no layout. That is the same shape Vision returns,
+so `RegionCopier` would need no new seam beyond a second implementation behind the platform check.
 
 ## Explicitly not planned
 

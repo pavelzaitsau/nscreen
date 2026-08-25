@@ -477,3 +477,13 @@ dotnet_diagnostic.SS003.severity = none
 # SS002 - the only DateTime use is the timestamp on a console log a person is watching on their own
 # machine. Local time is correct there; UtcNow would be actively worse.
 dotnet_diagnostic.SS002.severity = none
+
+# ---------------------------------------------------------------------------
+# nscreen: SS066 and IDE0031 disagree about how an optional disposable field is released.
+# IDE0031 rewrites `if (field is not null) { field.Dispose(); }` into `field?.Dispose();`, and
+# SS066 does not read the null-conditional form as disposal - so one of the two has to give.
+# IDE0031 wins, because that is the form the rest of the language uses, and because IDISP002
+# still catches a member that nothing disposes at all. Both fields are released in Dispose.
+# ---------------------------------------------------------------------------
+[NScreen.Client/{RegionCopier,ViewerSurface}.cs]
+dotnet_diagnostic.SS066.severity = none

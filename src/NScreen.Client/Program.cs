@@ -17,9 +17,14 @@ internal static class Program
           nscreen-client <host>[:port]    connect directly, skipping discovery
           nscreen-client [fe80::1]:7000   an IPv6 literal only carries a port in brackets
 
-            --port N   TCP port (default 7000)
+            --port N          TCP port (default 7000)
+            --mode image|text what a dragged region is copied as (default image)
 
-        Esc closes the window, F11 toggles fullscreen.
+        Drag with the left button to copy a region of the remote screen. In image mode it goes to
+        the clipboard as a picture; in text mode macOS reads it and the text goes instead.
+
+        I switches to image, T switches to text, Esc drops a selection and then closes the window,
+        F11 toggles fullscreen.
         """;
 
     /// <summary>How long to wait before asking the server again after a stream ended.</summary>
@@ -28,6 +33,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         var port = Protocol.DefaultPort;
+        var mode = SelectionMode.Image;
         string? host = null;
 
         var next = 0;
@@ -40,6 +46,14 @@ internal static class Program
                     if (next >= args.Length || !int.TryParse(args[next++], out port))
                     {
                         return Fail("--port needs a number.");
+                    }
+
+                    break;
+
+                case "--mode" or "-m":
+                    if (next >= args.Length || !TryParseMode(args[next++], out mode))
+                    {
+                        return Fail("--mode takes image or text.");
                     }
 
                     break;
@@ -95,7 +109,7 @@ internal static class Program
                 Console.WriteLine($"Using {found[0]}");
             }
 
-            Watch(host, port);
+            Watch(host, port, mode);
             return 0;
         }
         catch (Exception ex)
@@ -110,20 +124,22 @@ internal static class Program
     /// its geometry before any UI exists gives the window its real size, and turns a server that is
     /// not there into a message instead of a dead window.
     /// </summary>
-    private static void Watch(string host, int port)
+    private static void Watch(string host, int port, SelectionMode mode)
     {
         var address = Target.Describe(host, port);
         Console.WriteLine($"Connecting to {address} ...");
 
         var (width, height) = Handshake(host, port, address);
-        Console.WriteLine($"Connected: {width}x{height}. Esc closes, F11 toggles fullscreen.");
+        Console.WriteLine(
+            $"Connected: {width}x{height}. Drag to copy a region, I and T pick what it is copied as, " +
+            "Esc closes, F11 toggles fullscreen.");
 
         AppBuilder.Configure<Application>()
             .UsePlatformDetect()
             .Start(
                 (app, _) =>
                 {
-                    using var window = new ViewerWindow(width, height, $"nscreen - {address}");
+                    using var window = new ViewerWindow(width, height, $"nscreen - {address}", mode);
 
                     new Thread(() => Follow(window, host, port, address))
                     {
@@ -195,7 +211,7 @@ internal static class Program
             var (width, height) = ReadHello(client, stream, address);
 
             window.Resize(width, height);
-            var title = $"nscreen - {address} - {width}x{height}";
+            Dispatcher.UIThread.Post(() => window.SetStreamTitle($"nscreen - {address} - {width}x{height}"));
             Console.WriteLine($"Streaming {width}x{height}.");
 
             // The callback fires on this thread, so window access is posted.
@@ -204,7 +220,7 @@ internal static class Program
                 window,
                 width,
                 height,
-                onStats: stats => Dispatcher.UIThread.Post(() => window.Title = $"{title}   {stats}"))
+                onStats: stats => Dispatcher.UIThread.Post(() => window.SetStats(stats)))
                 .Receive();
 
             return true;
@@ -251,6 +267,24 @@ internal static class Program
 
         client.ReceiveTimeout = 0;
         return Protocol.ReadHello(hello);
+    }
+
+    /// <summary>Internal rather than private: the tests cover the flag, and nothing else does.</summary>
+    internal static bool TryParseMode(string token, out SelectionMode mode)
+    {
+        mode = SelectionMode.Image;
+        switch (token)
+        {
+            case "image":
+                return true;
+
+            case "text":
+                mode = SelectionMode.Text;
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     private static int Fail(string message)

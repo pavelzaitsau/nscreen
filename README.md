@@ -9,7 +9,7 @@ This is not a remote desktop. There is no mouse or keyboard control, no audio an
 - **The server** runs on Windows x64, and cannot run anywhere else: DXGI Desktop Duplication has no macOS equivalent. It has no runtime dependencies - every OS call is hand-written P/Invoke, and COM goes through the vtable directly.
 - **The client** runs on Windows x64 and on **macOS with Apple Silicon**, from one codebase, on Avalonia.
 
-The server takes four flags and the client takes one. Everything else decides itself.
+The server takes four flags and the client takes two. Everything else decides itself.
 
 ## Quick start
 
@@ -54,7 +54,7 @@ If Gatekeeper blocks the unsigned binary:
 xattr -dr com.apple.quarantine .
 ```
 
-`Esc` closes the window and `F11` toggles fullscreen. After a client disconnects the server goes back to listening.
+`Esc` closes the window and `F11` toggles fullscreen. Dragging the left button over the picture copies that region of the remote screen. After a client disconnects the server goes back to listening.
 
 ### From source
 
@@ -129,6 +129,34 @@ It finds the server itself, and takes an address only where discovery cannot rea
 | `nscreen-client 192.168.1.42` | Connect directly, skipping discovery |
 | `nscreen-client host:7001` | The same, with the port in the address |
 | `nscreen-client [fe80::1]:7000` | An IPv6 literal carries a port only in brackets |
+
+Two flags follow the address: `--port N` for the TCP port, default 7000, and `--mode image` or
+`--mode text` for the copy mode the window starts in.
+
+#### Copying a region
+
+Drag the left button over the picture. The frame freezes for the length of the drag, so a moving
+screen cannot slide out from under the rectangle. Releasing the button copies what the rectangle
+covered:
+
+| Key | Effect |
+| --- | --- |
+| `I` | Image mode: the selected pixels, at the remote screen's own resolution |
+| `T` | Text mode: the English text inside the selection |
+| `Esc` | Drop a selection in progress; with none open, close the window |
+| `F11` | Fullscreen |
+
+The window title and a badge in the corner carry the current mode. A message under the picture says
+what was copied, and the console repeats it.
+
+The pixels come from the frame as it arrived, not from the scaled picture on screen. A window at
+half size still copies at the remote screen's full resolution.
+
+Text mode reads the selection with Vision, the OCR engine macOS carries: nothing is bundled, and no
+pixels leave the machine. One region takes about 200 ms on Apple Silicon, and 30 to 45 ms once the
+first call has loaded the model. On Windows text mode copies nothing and says so, because the OCR
+engine there sits behind WinRT activation that this client does not use - see
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## How it works
 
@@ -243,15 +271,25 @@ src/
   NScreen.Client/            net10.0, Avalonia. Not one Windows-only call
     Program.cs               arguments, discovery, connection, UI startup
     DiscoveryProbe.cs        broadcast + reply collection
-    ViewerWindow.cs          window sizing, title and keys
-    ViewerSurface.cs         WriteableBitmap + letterbox render
+    ViewerWindow.cs          window sizing, title, keys and the copy mode
+    ViewerSurface.cs         WriteableBitmap + letterbox render + the selection overlay
     FrameReceiver.cs         receive loop
+    RegionSelection.cs       window coordinates to remote pixels, and the crop
+    RegionCopier.cs          the clipboard, as pixels or as recognised text
+    SelectionMode.cs         image or text
+    PixelRegion.cs           a rectangle of the remote screen, in its own pixels
     Target.cs                host[:port], including the IPv6 forms
+    Native/                  macOS only, behind a runtime check
+      ObjC.cs                objc_getClass, sel_registerName, objc_msgSend
+      CoreGraphics.cs        BGRA bytes to the CGImage Vision reads
+      MacTextRecognizer.cs   VNRecognizeTextRequest, and the reading order of its results
 tests/
   NScreen.Tests/             net10.0, MSTest. Wire formats and discovery
 ```
 
 The split is not cosmetic: the server holds no window or rendering code, and the client holds no D3D or capture code. `CA1416`, platform compatibility, is deliberately left enabled in the client and in Core. It is the analyzer that catches a Windows-only call in code that has to run on macOS.
+
+`NScreen.Client/Native/` is the one platform-specific corner of the client, and it is macOS-only. The Objective-C runtime, CoreGraphics and Vision are reached the way the server reaches COM. `RegionCopier` checks `OperatingSystem.IsMacOS()` first, so a Windows client never loads those frameworks.
 
 ## Tests
 
@@ -299,6 +337,7 @@ Every item here was considered and left out, not overlooked:
 - **The mouse cursor is invisible.** DXGI hands the pointer over separately through `GetFramePointerShape`, and it is not in the frame. This shows during a demonstration, and it is the first thing worth adding.
 - The primary monitor only, and no picker. The server follows whichever monitor Windows puts at the origin of the virtual desktop, so unplugging that one or promoting another switches the stream. Choosing a particular monitor is not possible.
 - One viewer at a time.
+- **Text mode reads the screen on macOS only.** Windows has an OCR engine, `Windows.Media.Ocr`, but reaching it means WinRT activation rather than the plain P/Invoke this codebase uses. Image mode works on both platforms.
 - No encryption and no authentication. Whoever reaches `IP:port` watches. Use it on a trusted network only.
 - No test touches the capture path. Its risk sits in vtable slot numbers and struct layouts, and only running the server on Windows checks those. The wire formats and discovery are covered; see [Tests](#tests).
 

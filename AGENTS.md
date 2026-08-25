@@ -12,12 +12,18 @@ Three projects, and the split is load-bearing:
 | --- | --- | --- | --- |
 | `src/NScreen.Core` | `net10.0` | Wire formats only: frames, discovery, `RECT` | Any OS call at all |
 | `src/NScreen.Server` | `net10.0-windows`, x64 | Captures the primary display and serves it | Window or rendering code — it links neither user32 nor gdi32 |
-| `src/NScreen.Client` | `net10.0` | Finds a server, receives frames, draws them | D3D, capture, or **anything Windows-only** |
+| `src/NScreen.Client` | `net10.0` | Finds a server, receives frames, draws them, copies a selected region | D3D, capture, or **anything Windows-only** |
 | `tests/NScreen.Tests` | `net10.0` | MSTest over the wire formats and discovery | A reference to the server project |
 
 `CA1416` (platform compatibility) is deliberately left enabled: in the client and Core it is the
 analyzer that catches a Windows-only API sneaking into code that has to run on macOS. If it fires
 there, the fix is different code, not a suppression.
+
+One folder breaks the one-codebase rule in the other direction. `src/NScreen.Client/Native/` holds
+the Objective-C runtime, CoreGraphics and Vision, hand-written the way the server writes COM, and it
+is macOS-only. `RegionCopier` checks `OperatingSystem.IsMacOS()` before it reaches any of it, so the
+frameworks never load on Windows. Nothing Windows-specific belongs there, or anywhere else in the
+client: a second platform in that folder would be the point to stop and reconsider the split.
 
 Read [README.md](README.md) for what it does and [docs/PROTOCOL.md](docs/PROTOCOL.md) for the wire
 format before changing anything that crosses the socket.
@@ -102,12 +108,17 @@ cross-compiles, and the Mach-O binary it produces was checked here, but nothing 
 rather than implying otherwise, and prefer changes whose macOS behaviour follows from the API
 contract instead of from platform-specific tricks.
 
+One exception is on the record. `MacTextRecognizer.Recognize` was run on Apple Silicon against a
+rendered image and returned its lines in reading order, in 198 ms cold and 31 ms warm. The viewer
+window itself has still never been opened on macOS from an agent session.
+
 ## Style
 
 The `.editorconfig` files and the analyzer set in `Directory.Build.props` are carried over from the
-Netrix house configuration (`C:\Users\pavel\Work\wp`). `src/.editorconfig` carries exactly **six**
+Netrix house configuration (`C:\Users\pavel\Work\wp`). `src/.editorconfig` carries exactly **seven**
 deviations, each with a comment: four scoped to `Native/` (SDK spelling, file organisation, one
-struct declaration) and two project-wide (`SS003`, `SS002`). That number was derived by deleting
+struct declaration), two project-wide (`SS003`, `SS002`) and one for the two files where `SS066`
+and `IDE0031` demand opposite forms of the same disposal. That number was derived by deleting
 every suppression and re-adding only what actually fired. If you add code that trips a new rule,
 fix the code first.
 
