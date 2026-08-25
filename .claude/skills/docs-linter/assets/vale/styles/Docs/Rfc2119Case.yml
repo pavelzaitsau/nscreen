@@ -1,0 +1,7 @@
+extends: existence
+message: "Obligation keyword '%s' is lowercase. RFC 2119 keywords are uppercase."
+level: warning
+ignorecase: false
+tokens:
+  - '\bmust\b'
+  - '\bshould\b'

@@ -1,0 +1,2 @@
+# Misspellings this project actually produces, one per line.
+# Vale.Avoid flags them at error level. Keep it short and real.

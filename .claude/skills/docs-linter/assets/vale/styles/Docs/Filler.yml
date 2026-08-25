@@ -1,0 +1,13 @@
+extends: existence
+message: "Filler: '%s'. Carries no fact - delete it."
+level: error
+ignorecase: true
+tokens:
+  - basically
+  - essentially
+  - obviously
+  - of course
+  - as you know
+  - simply put
+  - needless to say
+  - it is worth noting that

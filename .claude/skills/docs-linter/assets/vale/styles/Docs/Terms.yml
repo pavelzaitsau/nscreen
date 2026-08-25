@@ -1,0 +1,10 @@
+# Project terminology. Generate this file from the project's term list;
+# never maintain both by hand. Two hand-synchronised copies drift, and the
+# drift stays invisible until someone greps.
+#
+# Left side: the wording to ban. Right side: the canonical term.
+extends: substitution
+message: "Project term: use '%s', not '%s'."
+level: error
+ignorecase: true
+swap: {}

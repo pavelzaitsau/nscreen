@@ -1,0 +1,11 @@
+extends: existence
+message: "Vague obligation: '%s'. Use MUST / MUST NOT / SHOULD / SHOULD NOT / MAY."
+level: warning
+ignorecase: false
+tokens:
+  - '\bneeds to be\b'
+  - '\bhas to be\b'
+  - '\bit is important that\b'
+  - '\bit is recommended\b'
+  - '\bshould probably\b'
+  - '\bwe should\b'

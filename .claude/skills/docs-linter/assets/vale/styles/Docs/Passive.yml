@@ -1,0 +1,8 @@
+extends: existence
+message: "Passive voice: '%s'. Name the actor, or confirm the sentence is definitional."
+# Noisy by design: also fires on legitimate definitional statements.
+# Kept advisory, never blocks.
+level: warning
+ignorecase: true
+raw:
+  - '\b(?:am|are|were|being|is|been|was|be)\s+(?:\w+ed|built|written|held|kept|sent|read|split|set|put|done|made|given|taken|shown|known|found|seen|thrown|drawn)\b'

@@ -1,0 +1,22 @@
+extends: substitution
+message: "Hidden verb or long form: use '%s' instead of '%s'."
+level: warning
+ignorecase: true
+swap:
+  performs validation of: validates
+  performs verification of: verifies
+  provides support for: supports
+  makes use of: uses
+  has the ability to: can
+  is able to: can
+  in order to: to
+  utilize: use
+  utilizes: uses
+  leverage: use
+  initiate: start
+  terminate: stop
+  prior to: before
+  subsequent to: after
+  in the event that: if
+  due to the fact that: because
+  at this point in time: now

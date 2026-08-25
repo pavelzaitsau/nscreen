@@ -1,0 +1,14 @@
+extends: substitution
+message: "Do not abbreviate in prose: write '%s', not '%s'."
+# An ad-hoc abbreviation costs more tokens than the word and breaks grep.
+level: error
+ignorecase: false
+swap:
+  cfg: config
+  pkg: package
+  msg: message
+  req: request
+  resp: response
+  idx: index
+  val: value
+  attr: attribute

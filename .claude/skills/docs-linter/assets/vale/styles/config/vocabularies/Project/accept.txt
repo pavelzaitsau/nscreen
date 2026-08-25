@@ -1,0 +1,3 @@
+# Proper nouns and product names, one per line, case as written.
+# Vale.Terms flags any other capitalisation of these.
+# Vale.Spelling is off, so this list is only about capitalisation.
