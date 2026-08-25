@@ -1,0 +1,234 @@
+name: ci
+
+# Every push to main publishes both platforms and - when the commits since the last tag earn a
+# version - tags the commit and attaches the archives to a GitHub release.
+# .github/scripts/version.ps1 owns the numbering rules.
+#
+# The docs and gate jobs report, and nothing waits for them: a build comes out of every push, and a
+# red check says what to fix rather than holding the artifacts back.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact version to release, 1.4.0. Empty derives it from the commits.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  # A path inside the workspace is the same on both runner images, which keeps one cache key
+  # shape for all of them.
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Audit the prose and the Markdown
+        run: python3 .claude/audit-docs.py
+
+  gate:
+    name: gate
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore nscreen.slnx
+
+      # Debug, because that is the configuration where Directory.Build.props adds the analyzers.
+      - name: Build with the full analyzer set
+        run: dotnet build nscreen.slnx -c Debug --no-restore -warnaserror
+
+      - name: Check the code style
+        run: dotnet format nscreen.slnx style --verify-no-changes --severity info --no-restore
+
+      - name: Check the analyzer findings
+        run: dotnet format nscreen.slnx analyzers --verify-no-changes --severity info --no-restore
+
+      - name: Test the wire formats and discovery
+        run: dotnet test nscreen.slnx --no-restore
+
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.derive.outputs.version }}
+      release: ${{ steps.derive.outputs.release }}
+    steps:
+      # The whole history and every tag: the number comes from both.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: derive
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: ./.github/scripts/version.ps1 -Version $env:INPUT_VERSION
+
+  windows:
+    name: win-x64
+    needs: [version]
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      NAME: nscreen-${{ needs.version.outputs.version }}-win-x64
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # -RequireAot: the runner image carries the C++ toolchain, so a silent fallback to single-file
+      # would mean the published server stopped being the one the README describes.
+      - name: Publish the server and the client
+        run: ./publish.ps1 -Runtime win-x64 -RequireAot -Version $env:VERSION
+
+      # Cheap, and the only check that the NativeAOT binary starts at all.
+      - name: Start both binaries
+        run: |
+          ./publish/win-x64/nscreen-server.exe --help
+          ./publish/win-x64/nscreen-client.exe --help
+
+      # v0.1.0 shipped an 8 MB native .pdb, 46% of its archive. This is the check that names it.
+      - name: Refuse to pack symbols
+        run: |
+          $symbols = @(Get-ChildItem publish/win-x64 -Filter *.pdb -File)
+          if ($symbols.Count -gt 0) { throw "publish/win-x64 still holds $($symbols.Count) .pdb file(s)." }
+
+      - name: Pack
+        run: |
+          Move-Item publish/win-x64 "publish/$env:NAME"
+          Compress-Archive -Path "publish/$env:NAME" -DestinationPath "$env:NAME.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: win-x64
+          path: ${{ env.NAME }}.zip
+          if-no-files-found: error
+
+  osx:
+    name: osx-arm64
+    needs: [version]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NAME: nscreen-client-${{ needs.version.outputs.version }}-osx-arm64
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # A Mach-O binary cannot run here, so nothing starts it. The trimmed single-file publish
+      # cross-compiles, which is the same thing publish.ps1 does on a Windows machine.
+      - name: Publish the client
+        run: ./publish.ps1 -Runtime osx-arm64 -Version $env:VERSION
+
+      # tar keeps the execute bit, and chmod puts it there whatever the host did.
+      - name: Pack
+        run: |
+          chmod +x publish/osx-arm64/nscreen-client
+          Move-Item publish/osx-arm64 "publish/$env:NAME"
+          tar -czf "$env:NAME.tar.gz" -C publish "$env:NAME"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: osx-arm64
+          path: ${{ env.NAME }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: [version, windows, osx]
+    if: needs.version.outputs.release == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Write the checksums
+        run: |
+          $archives = @(Get-ChildItem artifacts -File | Sort-Object Name)
+          $archives | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)" } | Set-Content artifacts/SHA256SUMS.txt
+
+      # Outside the workspace: the notes are a release body, not a file the repository keeps.
+      - name: Write the release notes
+        run: ./.github/scripts/version.ps1 -Version $env:VERSION -NotesPath "$env:RUNNER_TEMP/notes.md"
+
+      # git places the tag when a push to main earns one, which leaves gh with a tag that already
+      # exists in both cases: one code path, and no --target whose meaning depends on whether the tag
+      # is there. A tag pushed with GITHUB_TOKEN starts no workflow run, so this cannot loop back into
+      # itself. checkout leaves its credentials behind, so the push needs nothing else.
+      - name: Tag the commit
+        if: startsWith(github.ref, 'refs/heads/')
+        run: |
+          git tag "v$env:VERSION" $env:GITHUB_SHA
+          git push origin "v$env:VERSION"
+
+      - name: Create the release
+        run: |
+          $files = @(Get-ChildItem artifacts -File | ForEach-Object { $_.FullName })
+          gh release create "v$env:VERSION" --title "v$env:VERSION" --notes-file "$env:RUNNER_TEMP/notes.md" $files
